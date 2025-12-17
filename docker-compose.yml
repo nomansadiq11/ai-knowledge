@@ -18,20 +18,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # ChromaDB - Vector Database (Optional, using local storage instead)
-  # chromadb:
-  #   image: chromadb/chroma:latest
-  #   container_name: ai-knowledge-chromadb
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - chroma_data:/chroma/chroma
-  #   environment:
-  #     - IS_PERSISTENT=TRUE
-  #   networks:
-  #     - ai-knowledge-network
-  #   restart: unless-stopped
-
   # Streamlit Web UI
   webui:
     build:
@@ -57,4 +43,3 @@ networks:
 
 volumes:
   ollama_data:
-  # chroma_data:

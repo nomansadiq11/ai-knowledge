@@ -5,7 +5,11 @@ echo ""
 
 # Start docker compose
 echo "📦 Starting Docker containers..."
-docker compose up -d
+if ! docker compose up -d; then
+    echo "❌ Failed to start Docker containers"
+    echo "Please check Docker is running and try again"
+    exit 1
+fi
 
 echo ""
 echo "⏳ Waiting for services to be ready..."
