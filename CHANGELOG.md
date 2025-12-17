@@ -5,6 +5,19 @@ All notable changes to the AI Knowledge application will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-12-17
+
+### Security
+- **CRITICAL**: Updated langchain from 0.1.0 to 0.3.27 to fix security vulnerabilities
+- **CRITICAL**: Updated langchain-community from 0.0.10 to 0.3.27 to fix:
+  - XML External Entity (XXE) Attack vulnerability (CVE affecting versions < 0.3.27)
+  - SSRF vulnerability in RequestsToolkit component (CVE affecting versions < 0.0.28)
+  - Pickle deserialization of untrusted data vulnerability (CVE affecting versions < 0.2.4)
+
+### Changed
+- Updated dependencies to latest secure versions
+- All functionality remains compatible with new versions
+
 ## [1.0.0] - 2025-12-17
 
 ### Added
@@ -43,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Stack
 - Python 3.11
 - Streamlit 1.29.0
-- LangChain 0.1.0
+- LangChain 0.3.27
+- LangChain Community 0.3.27
 - ChromaDB 0.4.22
 - Ollama (Llama2 model)
 - Sentence Transformers

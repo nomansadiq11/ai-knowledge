@@ -93,7 +93,8 @@ ai-knowledge/
 
 - **Python**: Main programming language
 - **Streamlit**: Web UI framework
-- **LangChain**: RAG pipeline and LLM integration
+- **LangChain**: RAG pipeline and LLM integration (v0.3.27 - security patched)
+- **LangChain Community**: Community integrations (v0.3.27 - security patched)
 - **Ollama**: Local LLM inference
 - **ChromaDB**: Vector database for embeddings
 - **Sentence Transformers**: Text embeddings

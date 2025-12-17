@@ -136,7 +136,8 @@ Created comprehensive documentation:
 
 ### Backend
 - Python 3.11
-- LangChain (RAG framework)
+- LangChain 0.3.27 (RAG framework - security patched)
+- LangChain Community 0.3.27 (security patched)
 - ChromaDB (vector database)
 - PyPDF2 (PDF processing)
 - Sentence Transformers (embeddings)
