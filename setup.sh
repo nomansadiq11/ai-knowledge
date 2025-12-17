@@ -5,7 +5,7 @@ echo ""
 
 # Start docker compose
 echo "📦 Starting Docker containers..."
-docker-compose up -d
+docker compose up -d
 
 echo ""
 echo "⏳ Waiting for services to be ready..."
@@ -30,5 +30,5 @@ echo "✅ Setup complete!"
 echo ""
 echo "📱 Access the application at: http://localhost:8501"
 echo ""
-echo "To stop the application, run: docker-compose down"
-echo "To view logs, run: docker-compose logs -f"
+echo "To stop the application, run: docker compose down"
+echo "To view logs, run: docker compose logs -f"

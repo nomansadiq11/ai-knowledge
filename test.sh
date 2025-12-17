@@ -9,12 +9,18 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
+# Check for docker compose (v2) or docker-compose (v1)
+if docker compose version &> /dev/null; then
+    echo "✅ Docker Compose v2 is installed"
+    COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    echo "✅ Docker Compose v1 is installed"
+    COMPOSE_CMD="docker-compose"
+else
     echo "❌ Docker Compose is not installed. Please install Docker Compose first."
     exit 1
 fi
 
-echo "✅ Docker and Docker Compose are installed"
 echo ""
 
 # Check if docker-compose.yml exists
@@ -28,7 +34,7 @@ echo ""
 
 # Test building the Docker image
 echo "🏗️  Testing Docker build..."
-if docker-compose build --no-cache webui; then
+if $COMPOSE_CMD build --no-cache webui; then
     echo "✅ Docker build successful"
 else
     echo "❌ Docker build failed"
@@ -38,4 +44,4 @@ fi
 echo ""
 echo "✅ All tests passed!"
 echo ""
-echo "To start the application, run: ./setup.sh or docker-compose up -d"
+echo "To start the application, run: ./setup.sh or $COMPOSE_CMD up -d"
