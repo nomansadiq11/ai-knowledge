@@ -27,7 +27,7 @@ fi
 # Pull the LLM model if not already present
 echo ""
 echo "🤖 Pulling Llama2 model (this may take a while on first run)..."
-docker exec ai-knowledge-ollama ollama pull llama2
+ollama pull llama2
 
 echo ""
 echo "✅ Setup complete!"

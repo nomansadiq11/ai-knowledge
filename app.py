@@ -12,7 +12,8 @@ from langchain.prompts import PromptTemplate
 import chromadb
 
 # Configuration
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+# Default to local Ollama; Docker compose overrides to host.docker.internal
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
 CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
 UPLOAD_DIR = Path("uploads")
@@ -57,14 +58,14 @@ def create_vector_store(texts, embeddings):
         length_function=len
     )
     chunks = text_splitter.split_text(texts)
-    
+
     # Create vector store
     vectorstore = Chroma.from_texts(
         texts=chunks,
         embedding=embeddings,
         persist_directory="./chroma_db"
     )
-    
+
     return vectorstore
 
 def setup_qa_chain(vectorstore):
@@ -72,24 +73,24 @@ def setup_qa_chain(vectorstore):
     # Initialize Ollama LLM
     llm = Ollama(
         base_url=OLLAMA_HOST,
-        model="llama2"
+        model="gpt-oss:20b"
     )
-    
+
     # Create prompt template
-    template = """Use the following pieces of context to answer the question at the end. 
+    template = """Use the following pieces of context to answer the question at the end.
     If you don't know the answer, just say that you don't know, don't try to make up an answer.
-    
+
     Context: {context}
-    
+
     Question: {question}
-    
+
     Answer: """
-    
+
     PROMPT = PromptTemplate(
-        template=template, 
+        template=template,
         input_variables=["context", "question"]
     )
-    
+
     # Create QA chain
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
@@ -98,30 +99,30 @@ def setup_qa_chain(vectorstore):
         chain_type_kwargs={"prompt": PROMPT},
         return_source_documents=True
     )
-    
+
     return qa_chain
 
 def main():
     st.title("📚 AI Knowledge Base")
     st.markdown("Upload PDFs and chat with your documents using local AI")
-    
+
     # Sidebar for PDF upload
     with st.sidebar:
         st.header("📄 Document Upload")
-        
+
         # Check Ollama status
         if check_ollama_connection():
             st.success("✅ Ollama Connected")
         else:
             st.error("❌ Ollama Not Connected")
-            st.info("Make sure Ollama is running. Use docker-compose to start all services.")
-        
+            st.info("Ensure the local Ollama service is running on port 11434.")
+
         uploaded_files = st.file_uploader(
             "Upload PDF files",
             type=['pdf'],
             accept_multiple_files=True
         )
-        
+
         if uploaded_files and st.button("Process Documents"):
             with st.spinner("Processing PDFs..."):
                 all_text = ""
@@ -130,21 +131,21 @@ def main():
                     file_path = UPLOAD_DIR / uploaded_file.name
                     with open(file_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
-                    
+
                     # Extract text
                     text = extract_text_from_pdf(uploaded_file)
                     all_text += text + "\n\n"
                     st.success(f"✅ Processed: {uploaded_file.name}")
-                
+
                 # Create embeddings
                 embeddings = HuggingFaceEmbeddings(
                     model_name="sentence-transformers/all-MiniLM-L6-v2"
                 )
-                
+
                 # Create vector store
                 vectorstore = create_vector_store(all_text, embeddings)
                 st.session_state.vectorstore = vectorstore
-                
+
                 # Setup QA chain
                 if check_ollama_connection():
                     qa_chain = setup_qa_chain(vectorstore)
@@ -152,7 +153,7 @@ def main():
                     st.success("✅ Documents processed and ready for questions!")
                 else:
                     st.error("Cannot setup QA chain. Ollama is not connected.")
-        
+
         st.markdown("---")
         st.markdown("### About")
         st.markdown("This app uses:")
@@ -160,14 +161,14 @@ def main():
         st.markdown("- **ChromaDB** for vector storage")
         st.markdown("- **Sentence Transformers** for embeddings")
         st.markdown("- **LangChain** for RAG pipeline")
-        
+
         if st.button("Clear Chat History"):
             st.session_state.chat_history = []
             st.rerun()
-    
+
     # Main chat interface
     st.header("💬 Chat with Your Documents")
-    
+
     if st.session_state.vectorstore is None:
         st.info("👈 Please upload and process PDF documents first using the sidebar.")
     else:
@@ -175,16 +176,16 @@ def main():
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-        
+
         # Chat input
         if prompt := st.chat_input("Ask a question about your documents..."):
             # Add user message to chat history
             st.session_state.chat_history.append({"role": "user", "content": prompt})
-            
+
             # Display user message
             with st.chat_message("user"):
                 st.markdown(prompt)
-            
+
             # Generate response
             if st.session_state.qa_chain is not None:
                 with st.chat_message("assistant"):
@@ -193,12 +194,12 @@ def main():
                             response = st.session_state.qa_chain({"query": prompt})
                             answer = response['result']
                             st.markdown(answer)
-                            
+
                             # Add assistant response to chat history
                             st.session_state.chat_history.append(
                                 {"role": "assistant", "content": answer}
                             )
-                            
+
                             # Show source documents
                             with st.expander("📑 Source Documents"):
                                 for i, doc in enumerate(response['source_documents']):
