@@ -26,8 +26,8 @@ fi
 
 # Pull the LLM model if not already present
 echo ""
-echo "🤖 Pulling Llama2 model (this may take a while on first run)..."
-ollama pull llama2
+echo "🤖 Pulling gpt-oss:20b model (this may take a while on first run)..."
+ollama pull gpt-oss:20b
 
 echo ""
 echo "✅ Setup complete!"
