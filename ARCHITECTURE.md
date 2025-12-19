@@ -47,16 +47,16 @@ The AI Knowledge application is built with a microservices architecture using Do
 │                 │                │                              │
 │                 │                │                              │
 │        ┌────────▼────────┐  ┌────▼──────────┐                 │
-│        │                 │  │                │                 │
-│        │  Ollama LLM     │  │   ChromaDB    │                 │
+│        │                 │  │               │                 │
+│        │  local OllamaLLM│  │   ChromaDB    │                 │
 │        │  Container      │  │   (Local)     │                 │
 │        │                 │  │               │                 │
-│        │ • Llama2 Model  │  │ • Embeddings  │                 │
+│        │ • gpt-oss:20b   │  │ • Embeddings  │                 │
 │        │ • Inference     │  │ • Vectors     │                 │
 │        │ • API: :11434   │  │ • Search      │                 │
 │        │                 │  │               │                 │
-│        │ Volume:         │  │ (Persistent)  │                 │
-│        │ ollama_data     │  │               │                 │
+│        │                 │  │               │                 │
+│        │                 │  │               │                 │
 │        └─────────────────┘  └───────────────┘                 │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
