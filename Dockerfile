@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app.py .
+COPY utils/ ./utils/
 
 # Create uploads directory
 RUN mkdir -p uploads
