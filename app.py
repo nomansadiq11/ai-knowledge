@@ -1,23 +1,13 @@
 import streamlit as st
-import os
-from pathlib import Path
-import requests
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.llms import Ollama
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
-import chromadb
+from utils.config import OLLAMA_HOST, DEFAULT_EMBEDDING_MODEL, UPLOAD_DIR
+from utils.llm import check_ollama_connection
+from utils.vectorstore import create_vector_store, load_vector_store
+from utils.verification import verify_answer
+from utils.ingestion import extract_text_from_pdf, parse_invoice_items, build_ingestion_stats
+from utils.qa import setup_qa_chain
 
-# Configuration
-# Default to local Ollama; Docker compose overrides to host.docker.internal
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
-CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Configuration imported from utils/config.py
 
 # Page configuration
 st.set_page_config(
@@ -33,74 +23,16 @@ if 'qa_chain' not in st.session_state:
     st.session_state.qa_chain = None
 if 'vectorstore' not in st.session_state:
     st.session_state.vectorstore = None
+if 'invoice_items' not in st.session_state:
+    st.session_state.invoice_items = None
+if 'ingest_stats' not in st.session_state:
+    st.session_state.ingest_stats = None
+if 'invoice_parsing_enabled' not in st.session_state:
+    st.session_state.invoice_parsing_enabled = False
 
-def check_ollama_connection():
-    """Check if Ollama is available"""
-    try:
-        response = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
-        return response.status_code == 200
-    except (requests.exceptions.RequestException, Exception):
-        return False
-
-def extract_text_from_pdf(pdf_file):
-    """Extract text from PDF file"""
-    pdf_reader = PdfReader(pdf_file)
-    text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text()
-    return text
-
-def create_vector_store(texts, embeddings):
-    """Create or update vector store with new documents"""
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len
-    )
-    chunks = text_splitter.split_text(texts)
-
-    # Create vector store
-    vectorstore = Chroma.from_texts(
-        texts=chunks,
-        embedding=embeddings,
-        persist_directory="./chroma_db"
-    )
-
-    return vectorstore
-
-def setup_qa_chain(vectorstore):
-    """Setup Question Answering chain"""
-    # Initialize Ollama LLM
-    llm = Ollama(
-        base_url=OLLAMA_HOST,
-        model="gpt-oss:20b"
-    )
-
-    # Create prompt template
-    template = """Use the following pieces of context to answer the question at the end.
-    If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-    Context: {context}
-
-    Question: {question}
-
-    Answer: """
-
-    PROMPT = PromptTemplate(
-        template=template,
-        input_variables=["context", "question"]
-    )
-
-    # Create QA chain
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
-        chain_type_kwargs={"prompt": PROMPT},
-        return_source_documents=True
-    )
-
-    return qa_chain
+"""
+Helper functions moved to utils package.
+"""
 
 def main():
     st.title("📚 AI Knowledge Base")
@@ -111,7 +43,7 @@ def main():
         st.header("📄 Document Upload")
 
         # Check Ollama status
-        if check_ollama_connection():
+        if check_ollama_connection(OLLAMA_HOST):
             st.success("✅ Ollama Connected")
         else:
             st.error("❌ Ollama Not Connected")
@@ -122,10 +54,24 @@ def main():
             type=['pdf'],
             accept_multiple_files=True
         )
+        embedding_model = st.selectbox(
+            "Embedding model",
+            [
+                "sentence-transformers/all-mpnet-base-v2",
+                "sentence-transformers/all-MiniLM-L6-v2"
+            ],
+            index=0 if DEFAULT_EMBEDDING_MODEL.endswith("all-mpnet-base-v2") else 1
+        )
+        st.session_state.invoice_parsing_enabled = st.checkbox(
+            "Enable invoice parsing (structured extraction)",
+            value=st.session_state.invoice_parsing_enabled,
+            help="Extract product, price, date from invoice-like PDFs. Off by default to keep app general-purpose."
+        )
 
         if uploaded_files and st.button("Process Documents"):
             with st.spinner("Processing PDFs..."):
                 all_text = ""
+                texts_per_file = []
                 for uploaded_file in uploaded_files:
                     # Save uploaded file
                     file_path = UPLOAD_DIR / uploaded_file.name
@@ -135,22 +81,64 @@ def main():
                     # Extract text
                     text = extract_text_from_pdf(uploaded_file)
                     all_text += text + "\n\n"
+                    texts_per_file.append((uploaded_file.name, text))
                     st.success(f"✅ Processed: {uploaded_file.name}")
 
-                # Create embeddings
-                embeddings = HuggingFaceEmbeddings(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2"
-                )
-
-                # Create vector store
-                vectorstore = create_vector_store(all_text, embeddings)
+                embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
+                st.session_state.embeddings = embeddings
+                vectorstore, chunks = create_vector_store(all_text, embeddings)
                 st.session_state.vectorstore = vectorstore
+                st.session_state.ingest_stats = build_ingestion_stats(all_text, chunks, embeddings, embedding_model)
+
+                # Parse invoice items from each file (optional)
+                if st.session_state.invoice_parsing_enabled:
+                    all_items = []
+                    for fname, txt in texts_per_file:
+                        all_items.extend(parse_invoice_items(txt, fname))
+                    st.session_state.invoice_items = all_items
+                else:
+                    st.session_state.invoice_items = None
 
                 # Setup QA chain
-                if check_ollama_connection():
-                    qa_chain = setup_qa_chain(vectorstore)
+                if check_ollama_connection(OLLAMA_HOST):
+                    qa_chain = setup_qa_chain(vectorstore, OLLAMA_HOST)
                     st.session_state.qa_chain = qa_chain
                     st.success("✅ Documents processed and ready for questions!")
+                    # Ingestion diagnostics
+                    with st.expander("🔎 Ingestion Diagnostics"):
+                        stats = st.session_state.ingest_stats or {}
+                        st.markdown(
+                            f"- Extracted characters: `{stats.get('char_count', 0)}`\n"
+                            f"- Chunks created: `{stats.get('chunk_count', 0)}`\n"
+                            f"- Average chunk length: `{stats.get('avg_chunk_len', 0)}`\n"
+                            f"- Embedding model: `{stats.get('embedding_model', 'unknown')}`\n"
+                            f"- Embedding dimension: `{stats.get('embedding_dim', 'unknown')}`"
+                        )
+                        if stats.get('char_count', 0) < 200:
+                            st.warning("Very little text was extracted. If this PDF is scanned or image-based, consider using OCR for better results.")
+                        if stats.get('sample_chunk'):
+                            st.markdown("**Sample chunk:**")
+                            st.code(stats['sample_chunk'])
+
+                    # Invoice extraction summary (optional)
+                    if st.session_state.invoice_parsing_enabled and st.session_state.invoice_items:
+                        with st.expander("🧾 Invoice Items & Duplicates"):
+                            st.markdown("**Extracted line items (product, price, date, source):**")
+                            st.table(st.session_state.invoice_items[:100])
+                            # Duplicates by (product, price, date)
+                            counts = {}
+                            for it in st.session_state.invoice_items:
+                                key = (it["product"].lower().strip(), it["price"], it["date"])
+                                counts[key] = counts.get(key, 0) + 1
+                            dup_rows = []
+                            for (prod, price, date), cnt in counts.items():
+                                if cnt > 1:
+                                    dup_rows.append({"product": prod, "price": price, "date": date, "count": cnt})
+                            if dup_rows:
+                                st.markdown("**Duplicates (same product+price+date across items):**")
+                                st.table(dup_rows)
+                            else:
+                                st.info("No duplicates found for product+price+date.")
                 else:
                     st.error("Cannot setup QA chain. Ollama is not connected.")
 
@@ -166,7 +154,7 @@ def main():
             st.session_state.chat_history = []
             st.rerun()
 
-    # Main chat interface
+    # Main chat interface (chat enabled after processing documents)
     st.header("💬 Chat with Your Documents")
 
     if st.session_state.vectorstore is None:
@@ -192,7 +180,8 @@ def main():
                     with st.spinner("Thinking..."):
                         try:
                             response = st.session_state.qa_chain({"query": prompt})
-                            answer = response['result']
+                            # Handle both 'result' and 'answer' keys across LangChain versions
+                            answer = response.get('result') or response.get('answer') or ""
                             st.markdown(answer)
 
                             # Add assistant response to chat history
@@ -200,11 +189,33 @@ def main():
                                 {"role": "assistant", "content": answer}
                             )
 
-                            # Show source documents
+                            # Show source documents with fallback if none returned by chain
+                            sources = response.get('source_documents') or []
+                            if not sources and st.session_state.vectorstore is not None:
+                                try:
+                                    retriever = st.session_state.vectorstore.as_retriever(search_kwargs={"k": 3})
+                                    sources = retriever.get_relevant_documents(prompt)
+                                except Exception:
+                                    sources = []
+
                             with st.expander("📑 Source Documents"):
-                                for i, doc in enumerate(response['source_documents']):
-                                    st.markdown(f"**Chunk {i+1}:**")
-                                    st.text(doc.page_content[:300] + "...")
+                                if sources:
+                                    for i, doc in enumerate(sources):
+                                        st.markdown(f"**Chunk {i+1}:**")
+                                        st.text((getattr(doc, 'page_content', str(doc))[:300]) + "...")
+                                else:
+                                    st.info("No source documents available for this answer.")
+                            # Verification expander
+                            if sources and st.session_state.get('embeddings'):
+                                ver = verify_answer(answer, sources, st.session_state.embeddings)
+                                with st.expander("✅ Verification (Faithfulness)"):
+                                    st.markdown(
+                                        f"- Coverage score: `{ver['coverage_score']}`\n"
+                                        f"- Max sentence similarity: `{ver['max_sim']}`\n"
+                                        f"- Low-supported sentences: `{ver['low_coverage_sentences']}`"
+                                    )
+                                    if ver['flagged']:
+                                        st.warning("Answer may not be well-supported by sources. Consider rephrasing or increasing k.")
                         except Exception as e:
                             error_msg = f"Error: {str(e)}"
                             st.error(error_msg)
